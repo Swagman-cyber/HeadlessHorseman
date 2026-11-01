@@ -101,12 +101,24 @@ function createBot() {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.concat([
                         Buffer.from([0x03]), // 0x03 declares full local channel registration mapping complete
-                        packet.data.slice(1) // Cleanly duplicate the exact tail-end payload body
+                        packet.data.slice(1) 
                     ]);
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
                 }
             } 
+            // STEP 3: Server Registry Sync Completion Handshake
+            else if (packet.messageId === 3) {
+                // 0x04 confirms to FML3 that the client successfully merged all custom server block/item registries
+                if (packet.data && packet.data.length > 0) {
+                    responseData = Buffer.concat([
+                        Buffer.from([0x04]), 
+                        packet.data.slice(1, Math.min(4, packet.data.length)) // Acknowledge structural sequence keys
+                    ]);
+                } else {
+                    responseData = Buffer.from([0x04, 0x00]);
+                }
+            }
             // Catch-all response for any additional setup validation queries
             else {
                 responseData = Buffer.from([0x01, 0x00]);
@@ -121,7 +133,6 @@ function createBot() {
             
         } catch (error) {
             console.log(`[Handshake Error Intercept] Encountered payload processing glitch: ${error.message}`);
-            // Fallback safe dispatch to prevent loop freeze
             bot._client.write('login_plugin_response', {
                 messageId: packet.messageId,
                 data: Buffer.from([0x01, 0x00])
