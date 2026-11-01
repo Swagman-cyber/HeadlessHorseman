@@ -25,19 +25,21 @@ function createBot() {
         }
 
         const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-        const firstByte = (packet.data && packet.data.length > 0) ? packet.data : -1;
-        console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${firstByte.toString(16)}`);
+        
+        // FIXED: Extract the raw numeric integer byte value directly so .toString(16) works safely
+        const firstByteNum = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+        console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${firstByteNum.toString(16)}`);
 
         let responseData;
 
         try {
             // SCENARIO 1: TACZ Custom Initial Handshake (0x0e)
-            if (firstByte === 0x0e || messageId === 0) {
+            if (firstByteNum === 0x0e || messageId === 0) {
                 responseData = Buffer.from([0x01, 0x00]);
                 console.log(`[Forge Handshake] Verified initial mod hook context for Step #${messageId}`);
             } 
             // SCENARIO 2: Forge Chunk Stream Finalizer (FML3 Protocol Step #2 closing bracket)
-            else if (firstByte === 0x0d && messageId === 2) {
+            else if (firstByteNum === 0x0d && messageId === 2) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
                         Buffer.from([0x02]), // 0x02 signals to FML3 that client mod registry compilation is fully synchronized
@@ -49,7 +51,7 @@ function createBot() {
                 console.log(`[Forge Handshake] Sent FML3 Final Configuration Acknowledgment for Step #${messageId}`);
             }
             // SCENARIO 3: Standard FML3 Multi-part Chunk Receipt (Step 1 or intermediate 0x0d packets)
-            else if (firstByte === 0x0d) {
+            else if (firstByteNum === 0x0d) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
                         Buffer.from([0x01]), // 0x01 chunk received acknowledgment
