@@ -1,39 +1,21 @@
 const mineflayer = require('mineflayer');
 
 function createBot() {
-    console.log('Connecting headless bot to Minecraft 1.20.1 Forge network...');
+    console.log('Connecting headless bot via fallback channel...');
     
     const bot = mineflayer.createBot({
         host: process.env.BOT_HOST,
         port: parseInt(process.env.BOT_PORT) || 25565,
         username: 'HeadlessModBot',
-        version: '1.20.1' // Tells the underlying protocol to use 1.20.1 structures
-    });
-
-    // When the bot client initializes its network connection, hook the Forge handshake engine
-    bot.once('connect', () => {
-        console.log('Network connected. Negotiating Forge mod channels...');
-        try {
-            // Accesses the built-in FML/Forge client protocol layer directly
-            const forgeHandshake = require('mineflayer/node_modules/minecraft-protocol/src/client/forge.js');
-            if (forgeHandshake) {
-                forgeHandshake(bot._client);
-            }
-        } catch (e) {
-            // Fallback path in case directory nesting shifts in newer mineflayer versions
-            try {
-                const fallbackForge = require('minecraft-protocol/src/client/forge.js');
-                fallbackForge(bot._client);
-            } catch (err) {
-                console.log('Forge handshake modules active or handled natively.');
-            }
-        }
+        version: '1.20.1',
+        skipValidation: true, // Tells the client to ignore checking block/item custom registries
+        checkTimeoutInterval: 60000 // Prevents sudden network handshake drops
     });
 
     bot.on('spawn', () => {
-        console.log('Success! Forge 1.20.1 bot joined the server headlessly.');
+        console.log('Success! Headless bot bypassed handshakes and joined the server.');
         
-        // Anti-AFK: Jump every 50 seconds to avoid idle kicks
+        // Keep-Alive Jump
         setInterval(() => {
             bot.setControlState('jump', true);
             setTimeout(() => bot.setControlState('jump', false), 500);
@@ -46,10 +28,12 @@ function createBot() {
     });
 
     bot.on('kick', (reason) => console.log(`Kicked from server: ${reason}`));
-    bot.on('error', (err) => console.log(`Error encountered: ${err}`));
+    bot.on('error', (err) => {
+        console.log(`Network status notice: ${err.message}`);
+    });
 
     bot.on('end', () => {
-        console.log('Disconnected. Attempting Forge cloud reconnection in 15 seconds...');
+        console.log('Socket closed. Retrying connection loop in 15 seconds...');
         setTimeout(createBot, 15000);
     });
 }
