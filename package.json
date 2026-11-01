@@ -4,6 +4,7 @@
   "description": "Permanently free headless forge bot",
   "main": "index.js",
   "dependencies": {
-    "mineflayer": "^4.22.0"
+    "mineflayer": "^4.22.0",
+    "minecraft-protocol-forge": "^1.0.1"
   }
 }
