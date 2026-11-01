@@ -6,7 +6,6 @@ function createBot() {
     const targetHost = process.env.BOT_HOST || 'localhost';
     
     // Explicitly forces the underlying network socket to append the Forge 3 delimiter.
-    // This tells the cracked server's firewall that we are connecting via a Forge client.
     const forgeTaggedHost = `${targetHost}\0FML3\0`;
 
     const bot = mineflayer.createBot({
@@ -24,18 +23,21 @@ function createBot() {
         
         let responseData = Buffer.alloc(0);
 
-        // Forge 47.4.28 expects an acknowledgement confirmation payload on its core channels
-        if (packet.channel.includes('forge') || packet.channel.includes('fml')) {
-            // Write out a standard 1-byte compliance token acknowledging the mod configuration step
+        // Handle modern FML3 login wrapper sequences safely
+        if (packet.channel === 'fml:loginwrapper') {
+            // Write a standard 1-byte success response state (0x01 = ACK / Client Mod List Follows/Complete)
+            responseData = Buffer.from([0x01]);
+        } else if (packet.channel.includes('forge') || packet.channel.includes('fml')) {
             responseData = Buffer.from([0x00]); 
         }
 
+        // CRITICAL FIX: Use packet.id instead of packet.transactionId
         bot._client.write('login_plugin_response', {
-            transactionId: packet.transactionId,
+            id: packet.id,
             data: responseData
         });
         
-        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.transactionId}`);
+        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.id}`);
     });
 
     bot.on('spawn', () => {
