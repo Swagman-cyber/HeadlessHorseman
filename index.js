@@ -5,7 +5,7 @@ function createBot() {
 
     const targetHost = process.env.BOT_HOST || 'localhost';
     
-    // Explicitly forces the underlying network socket to append the Forge 3 delimiter.
+    // Injects the FML3 token descriptor straight into the initial pipeline
     const forgeTaggedHost = `${targetHost}\0FML3\0`;
 
     const bot = mineflayer.createBot({
@@ -13,7 +13,7 @@ function createBot() {
         port: parseInt(process.env.BOT_PORT) || 25565,
         username: 'HeadlessModBot',
         version: '1.20.1', 
-        auth: 'offline', // Enforces cracked mode authentication protocol
+        auth: 'offline', // Clears custom authentication checks for cracked mode
         skipValidation: true
     });
 
@@ -23,21 +23,21 @@ function createBot() {
         
         let responseData = Buffer.alloc(0);
 
-        // Handle modern FML3 login wrapper sequences safely
+        // Safely declare compliance back to the fml login wrapper sequence
         if (packet.channel === 'fml:loginwrapper') {
-            // Write a standard 1-byte success response state (0x01 = ACK / Client Mod List Follows/Complete)
+            // Write a standard 1-byte handshake response acknowledgement sequence
             responseData = Buffer.from([0x01]);
         } else if (packet.channel.includes('forge') || packet.channel.includes('fml')) {
             responseData = Buffer.from([0x00]); 
         }
 
-        // CRITICAL FIX: Use packet.id instead of packet.transactionId
+        // CRITICAL PROTOCOL FIX: Write back using 'messageId' matching packet.messageId
         bot._client.write('login_plugin_response', {
-            id: packet.id,
+            messageId: packet.messageId,
             data: responseData
         });
         
-        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.id}`);
+        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.messageId}`);
     });
 
     bot.on('spawn', () => {
