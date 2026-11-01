@@ -1,0 +1,10 @@
+{
+  "name": "headless-forge-bot",
+  "version": "1.0.0",
+  "description": "Permanently free headless forge bot",
+  "main": "index.js",
+  "dependencies": {
+    "mineflayer": "^4.22.0",
+    "mineflayer-modded-anvil": "^1.2.0"
+  }
+}
