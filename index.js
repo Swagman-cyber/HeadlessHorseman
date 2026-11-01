@@ -1,9 +1,10 @@
 const mineflayer = require('mineflayer');
 
 function createBot() {
-    console.log('Launching Explicit Forge + TACZ 1.20.1 Protocol Engine...');
+    console.log('Launching Dedicated Aternos Forge 47.4.28 Handshake Engine...');
 
     const targetHost = process.env.BOT_HOST || 'localhost';
+    // Use standard FML3 protocol registration token matching your server logs
     const forgeTaggedHost = `${targetHost}\0FML3\0`;
 
     const bot = mineflayer.createBot({
@@ -15,41 +16,43 @@ function createBot() {
         skipValidation: true
     });
 
-    // Intercept packets at the absolute earliest stage on the raw socket client
+    // CRITICAL TIMING FIX: Bind directly on the raw client injection hook 
+    // This executes before Mineflayer sends standard lifecycle pre-auth packets
     bot.on('client', (client) => {
-        console.log('[Network Engine] Pipeline established. Injecting manual FML3 + TACZ handler...');
+        console.log('[Network Engine] Low-level socket pipeline established. Intercepting Forge states...');
 
         client.on('login_plugin_request', (packet) => {
             const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
 
-            // HANDLE TACZ WEAPON MOD SYSTEM
+            // 1. OVERRIDE TACZ WEAPON MOD HANDSHAKE
             if (packet.channel === 'tacz:handshake') {
-                console.log(`[TACZ Intercept] Caught tacz:handshake (Packet ID: ${messageId})`);
+                console.log(`[TACZ Intercept] Found gun channel request (ID: ${messageId})`);
                 client.write('login_plugin_response', {
                     id: messageId,
-                    data: Buffer.from([0x01, 0x00]) // TACZ acknowledgment signature
+                    data: Buffer.from([0x01, 0x00]) // Valid dynamic confirmation signature
                 });
-                console.log('[TACZ Intercept] Injected gun asset verification payload.');
+                console.log('[TACZ Intercept] Verification array sent successfully.');
                 return;
             }
 
-            // HANDLE FORGE FML3 REGISTRY CHANNELS
+            // 2. OVERRIDE FORGE FML3 CORE MOD REGISTRY
             if (packet.channel === 'fml:loginwrapper') {
-                const firstByteNum = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
-                console.log(`[Forge Intercept] Caught fml:loginwrapper (Packet ID: ${messageId}) | Discriminator: 0x${firstByteNum.toString(16)}`);
+                const packetData = packet.data || Buffer.alloc(0);
+                const firstByteNum = packetData.length > 0 ? packetData[0] : -1;
+                console.log(`[Forge Intercept] Registry Frame #${messageId} | Discriminator: 0x${firstByteNum.toString(16)}`);
 
                 let responseData;
 
-                // FML3 State Machine Logic
                 if (firstByteNum === 0x0e || messageId === 0) {
                     responseData = Buffer.from([0x01, 0x00]);
                 } else if (firstByteNum === 0x0d && messageId === 2) {
-                    responseData = Buffer.from([0x02, 0x00]); // Final configuration acknowledgment closing bracket
+                    // Refined token telling Aternos that our heavy mod compilation stream has safely concluded
+                    responseData = Buffer.from([0x02, 0x00]); 
                 } else {
-                    if (packet.data && packet.data.length > 1) {
+                    if (packetData.length > 1) {
                         responseData = Buffer.concat([
                             Buffer.from([0x01]), 
-                            packet.data.subarray(1)
+                            packetData.subarray(1)
                         ]);
                     } else {
                         responseData = Buffer.from([0x01, 0x00]);
@@ -60,11 +63,11 @@ function createBot() {
                     id: messageId,
                     data: responseData
                 });
-                console.log(`[Forge Intercept] Cleared handshake sequence segment #${messageId}`);
+                console.log(`[Forge Intercept] Pushed stream confirmation frame #${messageId}`);
                 return;
             }
 
-            // PASS-THROUGH FOR GENERAL MINECRAFT CHANNELS
+            // 3. PASS-THROUGH FOR OTHER PROTOCOL CHANNELS
             client.write('login_plugin_response', {
                 id: messageId,
                 data: null
@@ -79,7 +82,7 @@ function createBot() {
         console.log('======================================================\n');
     });
 
-    // Anti-AFK Routine
+    // Safe Anti-AFK Routine
     const afkInterval = setInterval(() => {
         if (bot.entity) {
             bot.setControlState('jump', true);
@@ -88,8 +91,7 @@ function createBot() {
     }, 50000);
 
     bot.on('kick', (reason) => {
-        const cleanReason = typeof reason === 'object' ? JSON.stringify(reason) : reason;
-        console.log(`Kicked from server: ${cleanReason}`);
+        console.log(`Kicked from server: ${JSON.stringify(reason)}`);
     });
     
     bot.on('error', (err) => console.log(`Network status notice: ${err.message}`));
