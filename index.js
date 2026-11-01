@@ -1,5 +1,25 @@
 const mineflayer = require('mineflayer');
 
+// Helper function to write VarInt bytes required by the Minecraft protocol
+function writeVarInt(value) {
+    const buffer = [];
+    while (true) {
+        if ((value & ~0x7F) === 0) {
+            buffer.push(value);
+            return Buffer.from(buffer);
+        }
+        buffer.push((value & 0x7F) | 0x80);
+        value >>>= 7;
+    }
+}
+
+// Helper to format string segments into [VarInt Length + Data] strings
+function encodeString(str) {
+    const strBuffer = Buffer.from(str, 'utf8');
+    const lenBuffer = writeVarInt(strBuffer.length);
+    return Buffer.concat([lenBuffer, strBuffer]);
+}
+
 function createBot() {
     console.log('Launching Verified Forge 1.20.1 Handshake Modpack Emulator...');
 
@@ -15,13 +35,44 @@ function createBot() {
         skipValidation: true
     });
 
+    // Explicit mod details collected from your server registry setup
+    const activeModPack = [
+        { id: 'minecraft', version: '1.20.1' },
+        { id: 'forge', version: '47.4.28' },
+        { id: 'architectury', version: '9.2.14' },
+        { id: 'clockwork', version: '0.5.6' },
+        { id: 'connectivity', version: '7.7' },
+        { id: 'create', version: '6.0.8' },
+        { id: 'createbigcannons', version: '5.11.4' },
+        { id: 'cupboard', version: '4.2' },
+        { id: 'curios', version: '5.14.1' },
+        { id: 'fcp', version: '1.2.1' },
+        { id: 'ferritecore', version: '6.0.1' },
+        { id: 'framework', version: '0.8.0' },
+        { id: 'geckolib', version: '4.8.4' },
+        { id: 'hbm_m', version: '0.2.1-alpha' },
+        { id: 'kotlinforforge', version: '4.12.0' },
+        { id: 'pillagers_gun', version: '3.2.1' },
+        { id: 'playeranimator', version: '1.0.2-rc1' },
+        { id: 'omegarecon', version: '3.3.1' },
+        { id: 'recruits', version: '1.15.2' },
+        { id: 'ritchiesprojectilelib', version: '2.1.1' },
+        { id: 'snassets_particles', version: '1.0.3' },
+        { id: 'superbrecruits', version: '1.115' },
+        { id: 'superbwarfare', version: '0.8.9' },
+        { id: 'tacz', version: '1.1.8-hotfix2' },
+        { id: 'trackwork', version: '1.2.4' },
+        { id: 'valkyrienskies', version: '2.4.11' },
+        { id: 'xaerominimap', version: '26.6.0' },
+        { id: 'xaeroworldmap', version: '1.47.0' }
+    ];
+
     bot._client.on('login_plugin_request', (packet) => {
         if (packet.channel !== 'fml:loginwrapper') {
             bot._client.write('login_plugin_response', { messageId: packet.messageId, data: Buffer.alloc(0) });
             return;
         }
 
-        // Auto-extract the channel tracker signature 
         const subChannelLength = packet.data ? packet.data[0] : 0;
         let subChannelName = '';
         try {
@@ -38,24 +89,32 @@ function createBot() {
         if (packet.messageId === 0) {
             responseData = Buffer.from([0x01, 0x00]); 
         } 
-        // STEP 1: Core Mod List Structural Acknowledgement
+        // STEP 1: Strict Client Mod List Declaration (Calculated using structural VarInt arrays)
         else if (packet.messageId === 1) {
-            responseData = Buffer.from([0x01, 0x01]); 
+            const bufferSegments = [
+                Buffer.from([0x01]), // Handshake step discriminator
+                writeVarInt(activeModPack.length) // Correctly encoded number of mods as a VarInt
+            ];
+
+            // Loop through each mod to inject [VarInt Len + ModID] + [VarInt Len + Version]
+            activeModPack.forEach(mod => {
+                bufferSegments.push(encodeString(mod.id));
+                bufferSegments.push(encodeString(mod.version));
+            });
+
+            responseData = Buffer.concat(bufferSegments);
         } 
-        // STEP 2: Registry Channel Mapping Echo Sequence
+        // STEP 2: Channel List Verification Echo Loop
         else if (packet.messageId === 2) {
-            // Read the server's network configuration header and clone the payload shape.
-            // This maps the required mod tracking structures directly back to the validation engine.
             if (packet.data && packet.data.length > 2) {
                 responseData = Buffer.concat([
-                    Buffer.from([0x01]), // FML3 Success State Flag
-                    packet.data.slice(1, Math.min(64, packet.data.length)) // Echo back channel map alignment keys
+                    Buffer.from([0x01]), 
+                    packet.data.slice(1, Math.min(64, packet.data.length)) 
                 ]);
             } else {
                 responseData = Buffer.from([0x01, 0x01, 0x00]);
             }
         } 
-        // Higher ongoing synchronization frames
         else {
             responseData = Buffer.from([0x01, 0x00]);
         }
