@@ -5,6 +5,6 @@
   "main": "index.js",
   "dependencies": {
     "mineflayer": "^4.22.0",
-    "minecraft-protocol-forge": "^1.0.1"
+    "minecraft-protocol-forge": "github:PrismarineJS/node-minecraft-protocol-forge"
   }
 }
