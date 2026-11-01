@@ -15,20 +15,20 @@ function createBot() {
         skipValidation: true
     });
 
-    // Handle Forge's login wrappers smoothly using our dynamic mirroring loop
     bot._client.on('login_plugin_request', (packet) => {
         if (packet.channel !== 'fml:loginwrapper') {
             bot._client.write('login_plugin_response', {
-                id: packet.messageId || packet.id,
+                id: packet.messageId !== undefined ? packet.messageId : packet.id,
                 data: Buffer.alloc(0)
             });
             return;
         }
 
         const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-        const serverDiscriminator = (packet.data && packet.data.length > 0) ? packet.data : -1;
         
-        console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${serverDiscriminator.toString(16)}`);
+        // FIXED: Safely log the first discriminator byte without breaking the encoding format
+        const firstByte = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+        console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${firstByte.toString(16)}`);
 
         let responseData;
 
@@ -65,14 +65,14 @@ function createBot() {
         }
     });
 
-    // NEW 1.20.1 FIX: Explicitly acknowledge when the server shifts into the Configuration state
+    // Handles the transition from Login straight into Configuration state
     bot._client.on('state', (newState) => {
         console.log(`[Network Engine] Pipeline transitioned to state: ${newState}`);
         
         if (newState === 'configuration') {
             console.log('[Network Engine] Bypassing 1.20.1 Configuration state constraints...');
-            // Forces the underlying client to declare protocol synchronization ready 
-            // so the server pushes the final play state map packet to the bot
+            
+            // Send the required 1.20.1 vanilla confirmation handshake
             bot._client.write('configuration_acknowledged', {});
         }
     });
@@ -83,6 +83,7 @@ function createBot() {
         console.log(`Bot status: Active in modded world as ${bot.username}`);
         console.log('======================================================\n');
         
+        // Anti-AFK Jump Loop
         setInterval(() => {
             bot.setControlState('jump', true);
             setTimeout(() => bot.setControlState('jump', false), 500);
