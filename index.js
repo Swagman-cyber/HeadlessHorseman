@@ -1,8 +1,7 @@
 const mineflayer = require('mineflayer');
-const autoVersionForge = require('minecraft-protocol-forge/src/client/autoVersionForge');
 
 function createBot() {
-    console.log('Launching Dynamic Forge 1.20.1 Handshake Modpack Emulator...');
+    console.log('Launching Explicit Forge + TACZ 1.20.1 Protocol Engine...');
 
     const targetHost = process.env.BOT_HOST || 'localhost';
     const forgeTaggedHost = `${targetHost}\0FML3\0`;
@@ -11,38 +10,67 @@ function createBot() {
         host: forgeTaggedHost,
         port: parseInt(process.env.BOT_PORT, 10) || 25565,
         username: 'HeadlessModBot',
-        version: false, 
+        version: '1.20.1', 
         auth: 'offline',
         skipValidation: true
     });
 
-    // CRITICAL FIX: Intercept immediately on socket creation before any third-party plugins can claim the packets
+    // Intercept packets at the absolute earliest stage on the raw socket client
     bot.on('client', (client) => {
-        console.log('[Network Engine] Raw socket client bound. Injecting high-priority TACZ interceptor...');
-        
-        // Listen directly to raw pipeline traffic
-        client.on('login_plugin_request', (packet) => {
-            if (packet.channel === 'tacz:handshake') {
-                const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-                console.log(`\n[TACZ CRITICAL INTERCEPT] Caught custom gun packet (Step #${messageId})!`);
+        console.log('[Network Engine] Pipeline established. Injecting manual FML3 + TACZ handler...');
 
-                // Send the exact 2-byte verification payload required by TACZ server mods
+        client.on('login_plugin_request', (packet) => {
+            const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
+
+            // HANDLE TACZ WEAPON MOD SYSTEM
+            if (packet.channel === 'tacz:handshake') {
+                console.log(`[TACZ Intercept] Caught tacz:handshake (Packet ID: ${messageId})`);
                 client.write('login_plugin_response', {
                     id: messageId,
-                    data: Buffer.from([0x01, 0x00])
+                    data: Buffer.from([0x01, 0x00]) // TACZ acknowledgment signature
                 });
-
-                console.log(`[TACZ CRITICAL INTERCEPT] Overrode handler and successfully pushed gun registry verification.`);
+                console.log('[TACZ Intercept] Injected gun asset verification payload.');
+                return;
             }
+
+            // HANDLE FORGE FML3 REGISTRY CHANNELS
+            if (packet.channel === 'fml:loginwrapper') {
+                const firstByteNum = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+                console.log(`[Forge Intercept] Caught fml:loginwrapper (Packet ID: ${messageId}) | Discriminator: 0x${firstByteNum.toString(16)}`);
+
+                let responseData;
+
+                // FML3 State Machine Logic
+                if (firstByteNum === 0x0e || messageId === 0) {
+                    responseData = Buffer.from([0x01, 0x00]);
+                } else if (firstByteNum === 0x0d && messageId === 2) {
+                    responseData = Buffer.from([0x02, 0x00]); // Final configuration acknowledgment closing bracket
+                } else {
+                    if (packet.data && packet.data.length > 1) {
+                        responseData = Buffer.concat([
+                            Buffer.from([0x01]), 
+                            packet.data.subarray(1)
+                        ]);
+                    } else {
+                        responseData = Buffer.from([0x01, 0x00]);
+                    }
+                }
+
+                client.write('login_plugin_response', {
+                    id: messageId,
+                    data: responseData
+                });
+                console.log(`[Forge Intercept] Cleared handshake sequence segment #${messageId}`);
+                return;
+            }
+
+            // PASS-THROUGH FOR GENERAL MINECRAFT CHANNELS
+            client.write('login_plugin_response', {
+                id: messageId,
+                data: null
+            });
         });
     });
-
-    // Initialize standard Forge handler for blocks and items afterward
-    const options = {
-        forgeMods: undefined,
-        channels: undefined
-    };
-    autoVersionForge(bot._client, options);
 
     bot.on('spawn', () => {
         console.log('\n======================================================');
