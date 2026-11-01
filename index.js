@@ -31,23 +31,25 @@ function createBot() {
         let responseData;
 
         try {
-            // STEP 0: TACZ Initial Channel Verification Hook
-            if (messageId === 0) {
+            // SCENARIO 1: TACZ Custom Initial Handshake (0x0e)
+            if (firstByte === 0x0e || messageId === 0) {
                 responseData = Buffer.from([0x01, 0x00]);
+                console.log(`[Forge Handshake] Verified initial mod hook context for Step #${messageId}`);
             } 
-            // STEP 1: Process the Server ModList Sync acknowledgement phase safely
-            else if (messageId === 1) {
-                // If the server provides data, build a protocol-compliant FML3 acknowledgement sequence
+            // SCENARIO 2: Dynamic FML3 Multi-part Chunk Stream (0x0d)
+            // This covers Step 1, Step 2, and any subsequent chunk streams seamlessly!
+            else if (firstByte === 0x0d) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
-                        Buffer.from([0x01]), // 0x01 declares successful transaction acknowledgment block
-                        packet.data.subarray(1, Math.min(8, packet.data.length)) // Securely bind the tracking frame index keys
+                        Buffer.from([0x01]), // 0x01 declares successful chunk receipt acknowledgement
+                        packet.data.subarray(1) // Cleanly match and pass back the server's tracking identifiers
                     ]);
                 } else {
-                    responseData = Buffer.from([0x01, 0x01]);
+                    responseData = Buffer.from([0x01, 0x00]);
                 }
+                console.log(`[Forge Handshake] Acknowledged stream chunk verification markers for Step #${messageId}`);
             } 
-            // STEP 2 & Beyond: Safe continuation sync tracking mirror
+            // SCENARIO 3: Catch-all fallback for other operational protocol tokens
             else {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.from(packet.data);
@@ -85,6 +87,7 @@ function createBot() {
         console.log(`Bot status: Active in modded world as ${bot.username}`);
         console.log('======================================================\n');
         
+        // Anti-AFK Jump Loop
         setInterval(() => {
             bot.setControlState('jump', true);
             setTimeout(() => bot.setControlState('jump', false), 500);
