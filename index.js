@@ -99,9 +99,8 @@ function createBot() {
             // STEP 2: Channel List Verification Complete Clone Mapping
             else if (packet.messageId === 2) {
                 if (packet.data && packet.data.length > 0) {
-                    // Safe cloning mechanism
                     responseData = Buffer.from(packet.data);
-                    // Override only the leading packet discriminator byte to 0x03
+                    // FIXED: Properly modify the first byte of the buffer array directly
                     responseData[0] = 0x03; 
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
@@ -111,7 +110,7 @@ function createBot() {
             else if (packet.messageId === 3) {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.from(packet.data);
-                    // Override only the leading packet discriminator byte to 0x04
+                    // FIXED: Properly modify the first byte of the buffer array directly
                     responseData[0] = 0x04;
                 } else {
                     responseData = Buffer.from([0x04, 0x00]);
