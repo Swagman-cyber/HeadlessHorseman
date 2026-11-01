@@ -25,7 +25,7 @@ function createBot() {
         }
 
         const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-        const firstByte = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+        const firstByte = (packet.data && packet.data.length > 0) ? packet.data : -1;
         console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${firstByte.toString(16)}`);
 
         let responseData;
@@ -36,20 +36,31 @@ function createBot() {
                 responseData = Buffer.from([0x01, 0x00]);
                 console.log(`[Forge Handshake] Verified initial mod hook context for Step #${messageId}`);
             } 
-            // SCENARIO 2: Dynamic FML3 Multi-part Chunk Stream (0x0d)
-            // This covers Step 1, Step 2, and any subsequent chunk streams seamlessly!
+            // SCENARIO 2: Forge Chunk Stream Finalizer (FML3 Protocol Step #2 closing bracket)
+            else if (firstByte === 0x0d && messageId === 2) {
+                if (packet.data && packet.data.length > 1) {
+                    responseData = Buffer.concat([
+                        Buffer.from([0x02]), // 0x02 signals to FML3 that client mod registry compilation is fully synchronized
+                        packet.data.subarray(1) 
+                    ]);
+                } else {
+                    responseData = Buffer.from([0x02, 0x00]);
+                }
+                console.log(`[Forge Handshake] Sent FML3 Final Configuration Acknowledgment for Step #${messageId}`);
+            }
+            // SCENARIO 3: Standard FML3 Multi-part Chunk Receipt (Step 1 or intermediate 0x0d packets)
             else if (firstByte === 0x0d) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
-                        Buffer.from([0x01]), // 0x01 declares successful chunk receipt acknowledgement
-                        packet.data.subarray(1) // Cleanly match and pass back the server's tracking identifiers
+                        Buffer.from([0x01]), // 0x01 chunk received acknowledgment
+                        packet.data.subarray(1) 
                     ]);
                 } else {
                     responseData = Buffer.from([0x01, 0x00]);
                 }
                 console.log(`[Forge Handshake] Acknowledged stream chunk verification markers for Step #${messageId}`);
             } 
-            // SCENARIO 3: Catch-all fallback for other operational protocol tokens
+            // SCENARIO 4: Catch-all fallback for subsequent protocol tokens
             else {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.from(packet.data);
