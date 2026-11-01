@@ -19,25 +19,27 @@ function createBot() {
 
     // Intercept Forge's login registry payloads before state shifts to 'spawn'
     bot._client.on('login_plugin_request', (packet) => {
-        console.log(`[Forge Handshake] Intercepted channel validation request: ${packet.channel}`);
-        
+        console.log(`\n[Forge Handshake] Channel: ${packet.channel} | MessageID: ${packet.messageId}`);
+        console.log(`[Raw Payload Bytes]:`, packet.data);
+
         let responseData = Buffer.alloc(0);
 
-        // Safely declare compliance back to the fml login wrapper sequence
         if (packet.channel === 'fml:loginwrapper') {
-            // Write a standard 1-byte handshake response acknowledgement sequence
-            responseData = Buffer.from([0x01]);
-        } else if (packet.channel.includes('forge') || packet.channel.includes('fml')) {
-            responseData = Buffer.from([0x00]); 
-        }
+            // Read the internal channel name embedded inside the login wrapper
+            // FML3 protocol strings are typically prefixed by their length as a VarInt or UTF-8 bytes
+            const internalString = packet.data.toString('utf8', 1).replace(/[^a-zA-Z0-9_:]/g, '');
+            console.log(`[Nested Protocol Sub-Channel]: ${internalString}`);
 
-        // CRITICAL PROTOCOL FIX: Write back using 'messageId' matching packet.messageId
+            // Default acknowledgement byte
+            responseData = Buffer.from([0x01]);
+        } 
+
         bot._client.write('login_plugin_response', {
             messageId: packet.messageId,
             data: responseData
         });
         
-        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.messageId}`);
+        console.log(`[Forge Handshake] Replied to sequence #${packet.messageId}`);
     });
 
     bot.on('spawn', () => {
