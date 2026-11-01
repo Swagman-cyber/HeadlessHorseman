@@ -7,7 +7,6 @@ function createBot() {
     const targetHost = process.env.BOT_HOST || 'localhost';
     const forgeTaggedHost = `${targetHost}\0FML3\0`;
 
-    // CRITICAL FIX: Set version to false to allow autoVersionForge to negotiate headers
     const bot = mineflayer.createBot({
         host: forgeTaggedHost,
         port: parseInt(process.env.BOT_PORT, 10) || 25565,
@@ -17,16 +16,38 @@ function createBot() {
         skipValidation: true
     });
 
-    // Hook the dynamic automated forge handler to the client instance
+    // Configure Forge options to auto-negotiate base mods
     const options = {
-        forgeMods: undefined, // Leaving this undefined tells the engine to automatically match the server's mod list
+        forgeMods: undefined,
         channels: undefined
     };
     autoVersionForge(bot._client, options);
 
+    // CRITICAL FIX: Intercept the raw login requests to handle TACZ separately
+    bot.once('login', () => {
+        bot._client.on('login_plugin_request', (packet) => {
+            const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
+
+            // Specifically handle the TACZ mod verification channel
+            if (packet.channel === 'tacz:handshake') {
+                console.log(`[TACZ Mod Handler] Intercepted unique 'tacz:handshake' (Step #${messageId})`);
+                
+                // TACZ expects a standard 2-byte response [0x01, 0x00] to clear gun data checks
+                const taczPayload = Buffer.from([0x01, 0x00]);
+
+                bot._client.write('login_plugin_response', {
+                    id: messageId,
+                    data: taczPayload
+                });
+                
+                console.log(`[TACZ Mod Handler] Injected valid gun asset verification payload.`);
+            }
+        });
+    });
+
     bot.on('spawn', () => {
         console.log('\n======================================================');
-        console.log('SUCCESS! Dynamic Forge Handshake cleared completely.');
+        console.log('SUCCESS! Dynamic Forge & TACZ Handshakes cleared completely.');
         console.log(`Bot status: Active in modded world as ${bot.username}`);
         console.log('======================================================\n');
     });
