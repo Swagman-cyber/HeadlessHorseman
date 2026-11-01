@@ -89,14 +89,14 @@ function createBot() {
         if (packet.messageId === 0) {
             responseData = Buffer.from([0x01, 0x00]); 
         } 
-        // STEP 1: Strict Client Mod List Declaration (Calculated using structural VarInt arrays)
+        // STEP 1: FML3 Mod List Handshake Reply
         else if (packet.messageId === 1) {
             const bufferSegments = [
-                Buffer.from([0x01]), // Handshake step discriminator
-                writeVarInt(activeModPack.length) // Correctly encoded number of mods as a VarInt
+                Buffer.from([0x02]), // CRITICAL FIX: 0x02 tells FML3 this is a ModList array payload response
+                writeVarInt(activeModPack.length) // Number of items
             ];
 
-            // Loop through each mod to inject [VarInt Len + ModID] + [VarInt Len + Version]
+            // Injects mod information blocks cleanly
             activeModPack.forEach(mod => {
                 bufferSegments.push(encodeString(mod.id));
                 bufferSegments.push(encodeString(mod.version));
