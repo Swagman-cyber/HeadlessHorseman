@@ -76,14 +76,17 @@ function createBot() {
         let responseData;
 
         try {
-            // Read the internal discriminator flag from the server payload
             const serverDiscriminator = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
             console.log(`[Forge Handshake] Step #${packet.messageId} | Server Discriminator Byte: 0x${serverDiscriminator.toString(16)}`);
 
-            // SCENARIO A: Server is requesting Client Mod Layout (Usually maps to step 1)
-            if (serverDiscriminator === 0x01 && packet.messageId === 1) {
+            // STEP 0: TACZ Initial Mod Link Negotiation
+            if (packet.messageId === 0) {
+                responseData = Buffer.from([0x01, 0x00]); 
+            } 
+            // STEP 1: Server requests client configuration list structure 
+            else if (packet.messageId === 1) {
                 const bufferSegments = [
-                    Buffer.from([0x02]), // 0x02 tells FML3 this is the client ModList response
+                    Buffer.from([0x02]), // 0x02 forces FML3 to register client ModList arrays
                     writeVarInt(activeModPack.length)
                 ];
 
@@ -94,29 +97,29 @@ function createBot() {
 
                 responseData = Buffer.concat(bufferSegments);
             } 
-            // SCENARIO B: Server is sending its channel registry map (Usually maps to step 2)
-            else if (packet.messageId === 2 || serverDiscriminator === 0x02) {
+            // STEP 2: Channel verification array echoing stage
+            else if (packet.messageId === 2) {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.concat([
-                        Buffer.from([0x03]), // Client Channel Acknowledgement header
-                        packet.data.subarray(1) // Append the remaining payload bytes safely using subarray
+                        Buffer.from([0x03]), // 0x03 signals successful registration compliance back to the host
+                        packet.data.subarray(1) 
                     ]);
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
                 }
             }
-            // SCENARIO C: Server is executing Registry Sync (Usually maps to step 3)
-            else if (packet.messageId === 3 || serverDiscriminator === 0x03) {
+            // STEP 3: Dynamic server item registry merging step
+            else if (packet.messageId === 3) {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.concat([
-                        Buffer.from([0x04]), // Client Registry Acknowledgement header
+                        Buffer.from([0x04]), // 0x04 finalizes the runtime schema sync state
                         packet.data.subarray(1)
                     ]);
                 } else {
                     responseData = Buffer.from([0x04, 0x00]);
                 }
             }
-            // SCENARIO D: Catch-all fallback initialization step (Like Step 0 / TACZ initialization)
+            // Catch-all safety array logic for downstream setup handshakes
             else {
                 responseData = Buffer.from([0x01, 0x00]);
             }
