@@ -4,7 +4,6 @@
   "description": "Permanently free headless forge bot",
   "main": "index.js",
   "dependencies": {
-    "mineflayer": "^4.22.0",
-    "minecraft-protocol-forge": "github:PrismarineJS/node-minecraft-protocol-forge"
+    "mineflayer": "^4.22.0"
   }
 }
