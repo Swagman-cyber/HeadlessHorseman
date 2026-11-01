@@ -5,6 +5,6 @@
   "main": "index.js",
   "dependencies": {
     "mineflayer": "^4.22.0",
-    "mineflayer-modded-anvil": "^1.2.0"
+    "mineflayer-forge": "^1.0.1"
   }
 }
