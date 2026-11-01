@@ -73,20 +73,18 @@ function createBot() {
             return;
         }
 
-        console.log(`[Forge Handshake] Processing Sequence Step #${packet.messageId}`);
-
         let responseData;
 
         try {
-            // STEP 0: TACZ Initial Mod Link Negotiation
-            if (packet.messageId === 0) {
-                responseData = Buffer.from([0x01, 0x00]); 
-            } 
-            // STEP 1: FML3 Mod List Handshake Reply
-            else if (packet.messageId === 1) {
+            // Read the internal discriminator flag from the server payload
+            const serverDiscriminator = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+            console.log(`[Forge Handshake] Step #${packet.messageId} | Server Discriminator Byte: 0x${serverDiscriminator.toString(16)}`);
+
+            // SCENARIO A: Server is requesting Client Mod Layout (Usually maps to step 1)
+            if (serverDiscriminator === 0x01 && packet.messageId === 1) {
                 const bufferSegments = [
-                    Buffer.from([0x02]), // 0x02 tells FML3 this is a ModList array payload response
-                    writeVarInt(activeModPack.length) 
+                    Buffer.from([0x02]), // 0x02 tells FML3 this is the client ModList response
+                    writeVarInt(activeModPack.length)
                 ];
 
                 activeModPack.forEach(mod => {
@@ -96,27 +94,29 @@ function createBot() {
 
                 responseData = Buffer.concat(bufferSegments);
             } 
-            // STEP 2: Channel List Verification Complete Clone Mapping
-            else if (packet.messageId === 2) {
+            // SCENARIO B: Server is sending its channel registry map (Usually maps to step 2)
+            else if (packet.messageId === 2 || serverDiscriminator === 0x02) {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.from(packet.data);
-                    // FIXED: Properly modify the first byte of the buffer array directly
-                    responseData[0] = 0x03; 
+                    responseData = Buffer.concat([
+                        Buffer.from([0x03]), // Client Channel Acknowledgement header
+                        packet.data.subarray(1) // Append the remaining payload bytes safely using subarray
+                    ]);
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
                 }
-            } 
-            // STEP 3: Server Registry Sync Completion Handshake
-            else if (packet.messageId === 3) {
+            }
+            // SCENARIO C: Server is executing Registry Sync (Usually maps to step 3)
+            else if (packet.messageId === 3 || serverDiscriminator === 0x03) {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.from(packet.data);
-                    // FIXED: Properly modify the first byte of the buffer array directly
-                    responseData[0] = 0x04;
+                    responseData = Buffer.concat([
+                        Buffer.from([0x04]), // Client Registry Acknowledgement header
+                        packet.data.subarray(1)
+                    ]);
                 } else {
                     responseData = Buffer.from([0x04, 0x00]);
                 }
             }
-            // Catch-all response for any additional setup validation queries
+            // SCENARIO D: Catch-all fallback initialization step (Like Step 0 / TACZ initialization)
             else {
                 responseData = Buffer.from([0x01, 0x00]);
             }
@@ -129,7 +129,7 @@ function createBot() {
             console.log(`[Forge Handshake] Dispatched verification payload for sequence #${packet.messageId}`);
             
         } catch (error) {
-            console.log(`[Handshake Error Intercept] Encountered payload processing glitch: ${error.message}`);
+            console.log(`[Handshake Error Intercept] Payload processing breakdown: ${error.message}`);
             bot._client.write('login_plugin_response', {
                 messageId: packet.messageId,
                 data: Buffer.from([0x01, 0x00])
