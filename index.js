@@ -73,61 +73,60 @@ function createBot() {
             return;
         }
 
-        const subChannelLength = packet.data ? packet.data : 0;
-        let subChannelName = '';
-        try {
-            subChannelName = packet.data.toString('utf8', 1, 1 + subChannelLength);
-        } catch(e) {
-            subChannelName = 'unknown';
-        }
-
-        console.log(`[Forge Handshake] Packet #${packet.messageId} | Channel Context: ${subChannelName}`);
+        console.log(`[Forge Handshake] Processing Sequence Step #${packet.messageId}`);
 
         let responseData;
 
-        // STEP 0: TACZ Initial Mod Link Negotiation
-        if (packet.messageId === 0) {
-            responseData = Buffer.from([0x01, 0x00]); 
-        } 
-        // STEP 1: FML3 Mod List Handshake Reply
-        else if (packet.messageId === 1) {
-            const bufferSegments = [
-                Buffer.from([0x02]), // 0x02 tells FML3 this is a ModList array payload response
-                writeVarInt(activeModPack.length) 
-            ];
+        try {
+            // STEP 0: TACZ Initial Mod Link Negotiation
+            if (packet.messageId === 0) {
+                responseData = Buffer.from([0x01, 0x00]); 
+            } 
+            // STEP 1: FML3 Mod List Handshake Reply
+            else if (packet.messageId === 1) {
+                const bufferSegments = [
+                    Buffer.from([0x02]), // 0x02 tells FML3 this is a ModList array payload response
+                    writeVarInt(activeModPack.length) 
+                ];
 
-            activeModPack.forEach(mod => {
-                bufferSegments.push(encodeString(mod.id));
-                bufferSegments.push(encodeString(mod.version));
-            });
+                activeModPack.forEach(mod => {
+                    bufferSegments.push(encodeString(mod.id));
+                    bufferSegments.push(encodeString(mod.version));
+                });
 
-            responseData = Buffer.concat(bufferSegments);
-        } 
-        // STEP 2: Channel List Verification Complete Clone Mapping
-        else if (packet.messageId === 2) {
-            if (packet.data && packet.data.length > 0) {
-                // Read the server's incoming packet type byte (usually 0x01 for server channel list)
-                // In FML3 protocol, client replies to channel list with packet discriminator 0x03 (Registry Acknowledge)
-                // paired with a 1-to-1 clone of the channel sequence metadata sent by the host
-                responseData = Buffer.concat([
-                    Buffer.from([0x03]), // 0x03 declares full local channel registration mapping complete
-                    packet.data.slice(1) // Cleanly duplicate the exact tail-end payload body
-                ]);
-            } else {
-                responseData = Buffer.from([0x03, 0x00]);
+                responseData = Buffer.concat(bufferSegments);
+            } 
+            // STEP 2: Channel List Verification Complete Clone Mapping
+            else if (packet.messageId === 2) {
+                if (packet.data && packet.data.length > 0) {
+                    responseData = Buffer.concat([
+                        Buffer.from([0x03]), // 0x03 declares full local channel registration mapping complete
+                        packet.data.slice(1) // Cleanly duplicate the exact tail-end payload body
+                    ]);
+                } else {
+                    responseData = Buffer.from([0x03, 0x00]);
+                }
+            } 
+            // Catch-all response for any additional setup validation queries
+            else {
+                responseData = Buffer.from([0x01, 0x00]);
             }
-        } 
-        // Catch-all response for any additional setup validation queries
-        else {
-            responseData = Buffer.from([0x01, 0x00]);
-        }
 
-        bot._client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: responseData
-        });
-        
-        console.log(`[Forge Handshake] Dispatched verification payload for sequence #${packet.messageId}`);
+            bot._client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: responseData
+            });
+            
+            console.log(`[Forge Handshake] Dispatched verification payload for sequence #${packet.messageId}`);
+            
+        } catch (error) {
+            console.log(`[Handshake Error Intercept] Encountered payload processing glitch: ${error.message}`);
+            // Fallback safe dispatch to prevent loop freeze
+            bot._client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: Buffer.from([0x01, 0x00])
+            });
+        }
     });
 
     bot.on('spawn', () => {
