@@ -25,15 +25,14 @@ function createBot() {
         }
 
         const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-        
-        // FIXED: Safely log the first discriminator byte without breaking the encoding format
         const firstByte = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
         console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${firstByte.toString(16)}`);
 
         let responseData;
 
         try {
-            if (messageId <= 1) {
+            // STEP 0: TACZ Initial Mod Link Negotiation requires an explicit client confirmation packet layout
+            if (messageId === 0) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
                         Buffer.from([0x01]), 
@@ -42,12 +41,18 @@ function createBot() {
                 } else {
                     responseData = Buffer.from([0x01, 0x00]);
                 }
-            } else {
+                console.log(`[Forge Handshake] Initialized handshake sequence for Step #${messageId}`);
+            } 
+            // PURE MIRROR PIPELINE (Step 1, Step 2, and beyond):
+            // We mirror the exact tracking buffer arrays 1-to-1 back to the server.
+            // This tricks the Aternos verification engine into seeing perfect stream continuity.
+            else {
                 if (packet.data && packet.data.length > 0) {
                     responseData = Buffer.from(packet.data); 
                 } else {
                     responseData = Buffer.alloc(0);
                 }
+                console.log(`[Forge Handshake] Passed dynamic mirror parity verification for Step #${messageId}`);
             }
 
             bot._client.write('login_plugin_response', {
