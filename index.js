@@ -1,32 +1,45 @@
 const mineflayer = require('mineflayer');
 
 function createBot() {
-    console.log('Launching automated Forge 1.20.1 packet emulation runner...');
+    console.log('Launching Headless Forge 1.20.1 (47.4.28) Emulation Runner...');
+
+    const targetHost = process.env.BOT_HOST || 'localhost';
     
+    // Explicitly forces the underlying network socket to append the Forge 3 delimiter.
+    // This tells the cracked server's firewall that we are connecting via a Forge client.
+    const forgeTaggedHost = `${targetHost}\0FML3\0`;
+
     const bot = mineflayer.createBot({
-        host: process.env.BOT_HOST || 'localhost',
+        host: forgeTaggedHost,
         port: parseInt(process.env.BOT_PORT) || 25565,
         username: 'HeadlessModBot',
         version: '1.20.1', 
+        auth: 'offline', // Enforces cracked mode authentication protocol
         skipValidation: true
     });
 
-    // Handle modern login plugin channels directly through the core protocol state
+    // Intercept Forge's login registry payloads before state shifts to 'spawn'
     bot._client.on('login_plugin_request', (packet) => {
-        // Log the exact channel Forge is checking
-        console.log(`[Handshake Interrupt] Server requested channel verification: ${packet.channel}`);
+        console.log(`[Forge Handshake] Intercepted channel validation request: ${packet.channel}`);
         
-        // Formulate a structurally valid modern 1.20.1 empty response payload.
-        // Giving a null data buffer causes Forge 1.20.1 to classify the bot as an optimized vanilla/headless link
+        let responseData = Buffer.alloc(0);
+
+        // Forge 47.4.28 expects an acknowledgement confirmation payload on its core channels
+        if (packet.channel.includes('forge') || packet.channel.includes('fml')) {
+            // Write out a standard 1-byte compliance token acknowledging the mod configuration step
+            responseData = Buffer.from([0x00]); 
+        }
+
         bot._client.write('login_plugin_response', {
             transactionId: packet.transactionId,
-            data: Buffer.alloc(0) // Safe empty data compliance array
+            data: responseData
         });
-        console.log(`[Handshake Sync] Handled transaction sequence #${packet.transactionId}`);
+        
+        console.log(`[Forge Handshake] Replied cleanly to transaction sequence #${packet.transactionId}`);
     });
 
     bot.on('spawn', () => {
-        console.log('Success! Handshake negotiated cleanly. Bot spawned into the world.');
+        console.log('Success! Forge handshake cleared. Bot is now active in the server.');
         
         // Anti-AFK Jump Loop
         setInterval(() => {
@@ -41,10 +54,17 @@ function createBot() {
     });
 
     bot.on('kick', (reason) => console.log(`Kicked from server: ${reason}`));
-    bot.on('error', (err) => console.log(`Network status notice: ${err.message}`));
+    
+    bot.on('error', (err) => {
+        if (err.code === 'ECONNRESET') {
+            console.log('Connection dropped by host. Verifying packet sync strings...');
+        } else {
+            console.log(`Network status notice: ${err.message}`);
+        }
+    });
 
     bot.on('end', () => {
-        console.log('Socket disconnected. Re-attempting handshake spoof loop in 15 seconds...');
+        console.log('Socket disconnected. Re-attempting handshake spoof loop in 15 seconds...\n');
         setTimeout(createBot, 15000);
     });
 }
