@@ -99,22 +99,20 @@ function createBot() {
             // STEP 2: Channel List Verification Complete Clone Mapping
             else if (packet.messageId === 2) {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.concat([
-                        Buffer.from([0x03]), // 0x03 declares full local channel registration mapping complete
-                        packet.data.slice(1) 
-                    ]);
+                    // Safe cloning mechanism
+                    responseData = Buffer.from(packet.data);
+                    // Override only the leading packet discriminator byte to 0x03
+                    responseData[0] = 0x03; 
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
                 }
             } 
             // STEP 3: Server Registry Sync Completion Handshake
             else if (packet.messageId === 3) {
-                // 0x04 confirms to FML3 that the client successfully merged all custom server block/item registries
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.concat([
-                        Buffer.from([0x04]), 
-                        packet.data.slice(1, Math.min(4, packet.data.length)) // Acknowledge structural sequence keys
-                    ]);
+                    responseData = Buffer.from(packet.data);
+                    // Override only the leading packet discriminator byte to 0x04
+                    responseData[0] = 0x04;
                 } else {
                     responseData = Buffer.from([0x04, 0x00]);
                 }
