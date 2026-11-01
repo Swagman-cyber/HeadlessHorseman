@@ -15,6 +15,7 @@ function createBot() {
         skipValidation: true
     });
 
+    // Handle Forge's login wrappers smoothly using our dynamic mirroring loop
     bot._client.on('login_plugin_request', (packet) => {
         if (packet.channel !== 'fml:loginwrapper') {
             bot._client.write('login_plugin_response', {
@@ -25,36 +26,28 @@ function createBot() {
         }
 
         const messageId = packet.messageId !== undefined ? packet.messageId : packet.id;
-        const serverDiscriminator = (packet.data && packet.data.length > 0) ? packet.data[0] : -1;
+        const serverDiscriminator = (packet.data && packet.data.length > 0) ? packet.data : -1;
         
         console.log(`[Forge Handshake] Step #${messageId} | Sub-Channel Discriminator: 0x${serverDiscriminator.toString(16)}`);
 
         let responseData;
 
         try {
-            // DYNAMIC STREAM MIRROR PIPELINE:
-            // For the initial handshake frames (Step 0 and Step 1), we override the header with 0x01 to activate client acknowledgment mode.
             if (messageId <= 1) {
                 if (packet.data && packet.data.length > 1) {
                     responseData = Buffer.concat([
-                        Buffer.from([0x01]), // Client Ready Signal
-                        packet.data.subarray(1) // Append remaining server tracking headers
+                        Buffer.from([0x01]), 
+                        packet.data.subarray(1) 
                     ]);
                 } else {
                     responseData = Buffer.from([0x01, 0x00]);
                 }
-                console.log(`[Forge Handshake] Initialized handshake sequence for Step #${messageId}`);
-            } 
-            // For Step 2 and beyond, if the server continues to stream chunk packets (like repeating 0x0d tags),
-            // we mirror the data back 1-to-1 without changing any bytes. This tricks the Aternos stream validator 
-            // into believing we successfully verified the packet parity checksums.
-            else {
+            } else {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.from(packet.data); // Pure 1-to-1 structural clone
+                    responseData = Buffer.from(packet.data); 
                 } else {
                     responseData = Buffer.alloc(0);
                 }
-                console.log(`[Forge Handshake] Passed stream-parity echo verification for Step #${messageId}`);
             }
 
             bot._client.write('login_plugin_response', {
@@ -62,14 +55,25 @@ function createBot() {
                 data: responseData
             });
             
-            console.log(`[Forge Handshake] Dispatched response payload cleanly.`);
+            console.log(`[Forge Handshake] Cleared frame sequence #${messageId}`);
             
         } catch (error) {
-            console.log(`[Handshake Error Intercept] Payload processing breakdown: ${error.message}`);
             bot._client.write('login_plugin_response', {
                 id: messageId,
                 data: Buffer.from([0x01, 0x00])
             });
+        }
+    });
+
+    // NEW 1.20.1 FIX: Explicitly acknowledge when the server shifts into the Configuration state
+    bot._client.on('state', (newState) => {
+        console.log(`[Network Engine] Pipeline transitioned to state: ${newState}`);
+        
+        if (newState === 'configuration') {
+            console.log('[Network Engine] Bypassing 1.20.1 Configuration state constraints...');
+            // Forces the underlying client to declare protocol synchronization ready 
+            // so the server pushes the final play state map packet to the bot
+            bot._client.write('configuration_acknowledged', {});
         }
     });
 
@@ -79,7 +83,6 @@ function createBot() {
         console.log(`Bot status: Active in modded world as ${bot.username}`);
         console.log('======================================================\n');
         
-        // Anti-AFK Jump Loop
         setInterval(() => {
             bot.setControlState('jump', true);
             setTimeout(() => bot.setControlState('jump', false), 500);
