@@ -1,8 +1,9 @@
 name: Permanently Free Headless Forge Bot
 on:
   push:
+  workflow_dispatch: # <-- ADD THIS LINE EXACTLY TO REVEAL THE RUN BUTTON
   schedule:
-    - cron: '0 */4 * * *' 
+    - cron: '0 */4 * * *'
 
 jobs:
   run-bot:
