@@ -83,7 +83,7 @@ function createBot() {
             if (packet.messageId === 0) {
                 responseData = Buffer.from([0x01, 0x00]); 
             } 
-            // STEP 1: Server requests client configuration list structure 
+            // STEP 1: Client Mod List Declaration
             else if (packet.messageId === 1) {
                 const bufferSegments = [
                     Buffer.from([0x02]), // 0x02 forces FML3 to register client ModList arrays
@@ -100,10 +100,9 @@ function createBot() {
             // STEP 2: Channel verification array echoing stage
             else if (packet.messageId === 2) {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.concat([
-                        Buffer.from([0x03]), // 0x03 signals successful registration compliance back to the host
-                        packet.data.subarray(1) 
-                    ]);
+                    responseData = Buffer.from(packet.data);
+                    // FIXED: Properly overwrite only index 0 of the buffer array directly
+                    responseData[0] = 0x03; 
                 } else {
                     responseData = Buffer.from([0x03, 0x00]);
                 }
@@ -111,10 +110,9 @@ function createBot() {
             // STEP 3: Dynamic server item registry merging step
             else if (packet.messageId === 3) {
                 if (packet.data && packet.data.length > 0) {
-                    responseData = Buffer.concat([
-                        Buffer.from([0x04]), // 0x04 finalizes the runtime schema sync state
-                        packet.data.subarray(1)
-                    ]);
+                    responseData = Buffer.from(packet.data);
+                    // FIXED: Properly overwrite only index 0 of the buffer array directly
+                    responseData[0] = 0x04;
                 } else {
                     responseData = Buffer.from([0x04, 0x00]);
                 }
