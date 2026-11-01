@@ -1,5 +1,5 @@
 const mineflayer = require('mineflayer');
-const forge = require('mineflayer-modded-anvil'); 
+const forge = require('mineflayer-forge'); 
 
 function createBot() {
     console.log('Connecting headless bot to Minecraft 1.20.1 Forge network...');
@@ -8,11 +8,11 @@ function createBot() {
         host: process.env.BOT_HOST,
         port: parseInt(process.env.BOT_PORT) || 25565,
         username: 'HeadlessModBot',
-        version: '1.20.1' // Forces the bot to use the exact 1.20.1 network protocol
+        version: '1.20.1' 
     });
 
-    // Injects modern Forge handshake channels into the connection
-    forge.forgeHandshake(bot);
+    // Load the Forge plugin layer into Mineflayer
+    forge.init(bot);
 
     bot.on('spawn', () => {
         console.log('Success! Forge 1.20.1 bot joined the server headlessly.');
